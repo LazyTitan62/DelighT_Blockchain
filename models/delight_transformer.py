@@ -1,7 +1,6 @@
 # ============================================
 __author__ = "Sachin Mehta"
 __maintainer__ = "Sachin Mehta"
-
 # ============================================
 
 # Adapted from Transformer model in Fairseq
@@ -12,15 +11,15 @@ from typing import Any, Dict, List, NamedTuple, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import options, utils
-from models import (
+from fairseq import options, utils
+from fairseq.models import (
     FairseqEncoder,
     FairseqEncoderDecoderModel,
     FairseqIncrementalDecoder,
     register_model,
     register_model_architecture,
 )
-from modules import (
+from fairseq.modules import (
     AdaptiveSoftmax,
     PositionalEmbedding,
     SinusoidalPositionalEmbedding,
@@ -28,10 +27,10 @@ from modules import (
     DeLighTTransformerDecoderLayer,
 )
 from torch import Tensor
-from delight_modules.dextra_emb import DExTraEmb
-from delight_modules.normalization_layers import get_norm_layer
-from delight_modules.nn_functions import get_weight_layer, get_embedding_layer
-from delight_modules import (
+from fairseq.delight_modules.dextra_emb import DExTraEmb
+from fairseq.delight_modules.normalization_layers import get_norm_layer
+from fairseq.delight_modules.nn_functions import get_weight_layer, get_embedding_layer
+from fairseq.delight_modules import (
     DEFAULT_WIDTH_MULTIPLIER,
     DEFAULT_MIN_DEXTRA_LAYERS,
     MIN_ELEMENTS_PER_GROUP,
@@ -39,10 +38,10 @@ from delight_modules import (
     DEFAULT_DROPOUT,
     DEFAULT_MAX_DEXTRA_LAYERS
 )
-from delight_modules.drop_layers import RecurrentDropout
+from fairseq.delight_modules.drop_layers import RecurrentDropout
 import numpy as np
-from delight_modules.math_utils import bound_function
-from distributed_utils import is_master
+from fairseq.delight_modules.math_utils import bound_function
+from fairseq.distributed_utils import is_master
 
 DEFAULT_MAX_SOURCE_POSITIONS = 1024
 DEFAULT_MAX_TARGET_POSITIONS = 1024
@@ -140,6 +139,7 @@ class DeLighTTransformerModel(FairseqEncoderDecoderModel):
         parser.add_argument('--encoder-normalize-before', action='store_true',
                             help='apply layernorm before each encoder block')
 
+
         parser.add_argument('--decoder-normalize-before', action='store_true',
                             help='apply layernorm before each decoder block')
         parser.add_argument('--share-decoder-input-output-embed', action='store_true',
@@ -200,7 +200,7 @@ class DeLighTTransformerModel(FairseqEncoderDecoderModel):
         # print macs and params layer-wise
         if args.print_stats and is_master(args):
             cls.comptue_stats(args, encoder, decoder)
-
+        
         return cls(args, encoder, decoder)
 
     @classmethod
@@ -423,8 +423,7 @@ class DeLighTTransformerEncoder(FairseqEncoder):
             else None
         )
 
-        self.positional_dropout = RecurrentDropout(p=args.pe_dropout,
-                                                   batch_first=True) if not args.no_token_positional_embeddings else None
+        self.positional_dropout = RecurrentDropout(p=args.pe_dropout, batch_first=True) if not args.no_token_positional_embeddings else None
 
         self.layer_wise_attention = getattr(args, "layer_wise_attention", False)
 
@@ -432,6 +431,7 @@ class DeLighTTransformerEncoder(FairseqEncoder):
 
         if args.delight_enc_scaling == 'block' and (args.delight_enc_min_depth == args.delight_enc_max_depth):
             args.delight_enc_scaling = 'uniform'
+
 
         if args.delight_enc_scaling == 'uniform':
             assert args.delight_enc_min_depth == args.delight_enc_max_depth
@@ -446,18 +446,17 @@ class DeLighTTransformerEncoder(FairseqEncoder):
             assert args.delight_enc_min_depth < args.delight_enc_max_depth
 
             dextra_depths = np.linspace(start=args.delight_enc_min_depth,
-                                        stop=args.delight_enc_max_depth,
-                                        num=args.delight_enc_layers,
-                                        dtype=np.int)
+                                         stop=args.delight_enc_max_depth,
+                                         num=args.delight_enc_layers,
+                                         dtype=np.int)
 
             depth_ratio = (args.delight_enc_max_depth * 1.0) / args.delight_enc_min_depth
 
             width_multipliers = np.linspace(start=args.delight_enc_width_mult,
-                                            stop=args.delight_enc_width_mult + (depth_ratio - 1.0),
-                                            # subtraction by 1 for max==min case
-                                            num=args.delight_enc_layers,
-                                            dtype=np.float
-                                            )
+                                      stop=args.delight_enc_width_mult + (depth_ratio - 1.0), # subtraction by 1 for max==min case
+                                      num=args.delight_enc_layers,
+                                      dtype=np.float
+                                      )
 
             self.layers.extend(
                 [DeLighTTransformerEncoderLayer(args=args,
@@ -475,7 +474,7 @@ class DeLighTTransformerEncoder(FairseqEncoder):
         else:
             self.layer_norm = None
 
-    def forward(self, src_tokens, src_lengths, *args, **kwargs):
+    def forward( self, src_tokens, src_lengths, *args, **kwargs ):
         """
         Args:
             src_tokens (LongTensor): tokens in the source language of shape
@@ -524,6 +523,7 @@ class DeLighTTransformerEncoder(FairseqEncoder):
             encoder_out=x,  # T x B x C
             encoder_padding_mask=encoder_padding_mask  # B x T
         )
+
 
     def reorder_encoder_out(self, encoder_out, new_order):
         """
@@ -670,8 +670,7 @@ class DeLighTTransformerDecoder(FairseqIncrementalDecoder):
             else None
         )
 
-        self.positional_dropout = RecurrentDropout(p=args.pe_dropout,
-                                                   batch_first=True) if not args.no_token_positional_embeddings else None
+        self.positional_dropout = RecurrentDropout(p=args.pe_dropout, batch_first=True) if not args.no_token_positional_embeddings else None
 
         if args.delight_dec_scaling == 'block' and (args.delight_dec_min_depth == args.delight_dec_max_depth):
             args.delight_dec_scaling = 'uniform'
@@ -693,17 +692,16 @@ class DeLighTTransformerDecoder(FairseqIncrementalDecoder):
             assert args.delight_dec_min_depth < args.delight_dec_max_depth
 
             dextra_depths = np.linspace(start=args.delight_dec_min_depth,
-                                        stop=args.delight_dec_max_depth,
-                                        num=args.delight_dec_layers,
-                                        dtype=np.int)
+                                         stop=args.delight_dec_max_depth,
+                                         num=args.delight_dec_layers,
+                                         dtype=np.int)
 
             depth_ratio = (args.delight_dec_max_depth * 1.0) / args.delight_dec_min_depth
             width_multipliers = np.linspace(start=args.delight_dec_width_mult,
-                                            stop=args.delight_dec_width_mult + (depth_ratio - 1.0),
-                                            # subtraction by 1 for max==min case
-                                            num=args.delight_dec_layers,
-                                            dtype=np.float
-                                            )
+                                      stop=args.delight_dec_width_mult + (depth_ratio - 1.0), # subtraction by 1 for max==min case
+                                      num=args.delight_dec_layers,
+                                      dtype=np.float
+                                      )
 
             self.layers.extend(
                 [DeLighTTransformerDecoderLayer(args=args,
@@ -883,9 +881,8 @@ class DeLighTTransformerDecoder(FairseqIncrementalDecoder):
     def buffered_future_mask(self, tensor):
         dim = tensor.size(0)
         # self._future_mask.device != tensor.device is not working in TorchScript. This is a workaround.
-        if (self._future_mask.size(0) == 0 or (not self._future_mask.device == tensor.device) or self._future_mask.size(
-                0) < dim):
-            self._future_mask = torch.triu(utils.fill_with_neg_inf(torch.zeros([dim, dim])), 1)
+        if (self._future_mask.size(0) == 0 or (not self._future_mask.device == tensor.device)  or self._future_mask.size(0) < dim ):
+            self._future_mask = torch.triu( utils.fill_with_neg_inf(torch.zeros([dim, dim])), 1 )
         self._future_mask = self._future_mask.to(tensor)
         return self._future_mask[:dim, :dim]
 
@@ -1093,14 +1090,14 @@ def delight_transformer_wmt14_en_de(args):
     # minimum depth
     args.delight_dec_min_depth = getattr(args, 'delight_dec_min_depth', 4)
     args.delight_enc_min_depth = getattr(args, 'delight_enc_min_depth', 4)
-    # assert args.delight_enc_min_depth == args.delight_dec_min_depth, '{} != {}'.format(args.delight_enc_min_depth,
+    #assert args.delight_enc_min_depth == args.delight_dec_min_depth, '{} != {}'.format(args.delight_enc_min_depth,
     #                                                                                   args.delight_dec_min_depth)
     args.delight_emb_depth = args.delight_dec_min_depth
 
     # maximum depth
     args.delight_dec_max_depth = getattr(args, 'delight_dec_max_depth', 8)
     args.delight_enc_max_depth = getattr(args, 'delight_enc_max_depth', 8)
-    # assert args.delight_enc_max_depth == args.delight_dec_max_depth, '{} != {}'.format(args.delight_enc_max_depth,
+    #assert args.delight_enc_max_depth == args.delight_dec_max_depth, '{} != {}'.format(args.delight_enc_max_depth,
     #                                                                                   args.delight_dec_max_depth)
 
     # we set number of encoder and decoder blocks equal to max depth
@@ -1128,9 +1125,9 @@ def delight_transformer_wmt14_en_de(args):
     args.dropout = getattr(args, "dropout", scale_dropout_d_m)
     args.delight_emb_dropout = getattr(args, "delight_emb_dropout", 0.1)
     args.attention_dropout = getattr(args, "attention_dropout", scale_attn_drop_d_m)
-    args.delight_dropout = getattr(args, "delight_dropout", 0.0)  # we don't use this in sufficiently large datasets
+    args.delight_dropout = getattr(args, "delight_dropout", 0.0) # we don't use this in sufficiently large datasets
     args.pe_dropout = getattr(args, "pe_dropout", 0.1)
-    args.activation_dropout = getattr(args, "activation_dropout", 0.0)  # We don't use it
+    args.activation_dropout = getattr(args, "activation_dropout", 0.0) # We don't use it
     args.ffn_dropout = getattr(args, "ffn_dropout", scale_dropout_d_m)
 
     # shared embeddings
@@ -1140,7 +1137,6 @@ def delight_transformer_wmt14_en_de(args):
     )
 
     base_architecture(args)
-
 
 @register_model_architecture("delight_transformer", "delight_transformer_wmt16_en_ro")
 @register_model_architecture("delight_transformer", "delight_transformer_wmt16_ro_en")
@@ -1154,14 +1150,14 @@ def delight_transformer_wmt16_en_ro(args):
     # minimum depth
     args.delight_dec_min_depth = getattr(args, 'delight_dec_min_depth', 4)
     args.delight_enc_min_depth = getattr(args, 'delight_enc_min_depth', 4)
-    # assert args.delight_enc_min_depth == args.delight_dec_min_depth, '{} != {}'.format(args.delight_enc_min_depth,
+    #assert args.delight_enc_min_depth == args.delight_dec_min_depth, '{} != {}'.format(args.delight_enc_min_depth,
     #                                                                                   args.delight_dec_min_depth)
     args.delight_emb_depth = args.delight_dec_min_depth
 
     # maximum depth
     args.delight_dec_max_depth = getattr(args, 'delight_dec_max_depth', 8)
     args.delight_enc_max_depth = getattr(args, 'delight_enc_max_depth', 8)
-    # assert args.delight_enc_max_depth == args.delight_dec_max_depth, '{} != {}'.format(args.delight_enc_max_depth,
+    #assert args.delight_enc_max_depth == args.delight_dec_max_depth, '{} != {}'.format(args.delight_enc_max_depth,
     #                                                                                   args.delight_dec_max_depth)
 
     # we set number of encoder and decoder blocks equal to max depth
@@ -1196,7 +1192,7 @@ def delight_transformer_wmt16_en_ro(args):
     args.attention_dropout = getattr(args, "attention_dropout", scale_attn_drop_d_m)
     args.delight_dropout = getattr(args, "delight_dropout", scale_delight_drop_d_m)
     args.pe_dropout = getattr(args, "pe_dropout", 0.1)
-    args.activation_dropout = getattr(args, "activation_dropout", 0.0)  # we don't use it
+    args.activation_dropout = getattr(args, "activation_dropout", 0.0) # we don't use it
     args.ffn_dropout = getattr(args, "ffn_dropout", scale_dropout_d_m)
 
     # shared embeddings
@@ -1206,7 +1202,6 @@ def delight_transformer_wmt16_en_ro(args):
     )
 
     base_architecture(args)
-
 
 @register_model_architecture("delight_transformer", "delight_transformer_wmt14_en_fr")
 @register_model_architecture("delight_transformer", "delight_transformer_wmt14_fr_en")
@@ -1220,14 +1215,14 @@ def delight_transformer_wmt16_en_de(args):
     # minimum depth
     args.delight_dec_min_depth = getattr(args, 'delight_dec_min_depth', 4)
     args.delight_enc_min_depth = getattr(args, 'delight_enc_min_depth', 4)
-    # assert args.delight_enc_min_depth == args.delight_dec_min_depth, '{} != {}'.format(args.delight_enc_min_depth,
+    #assert args.delight_enc_min_depth == args.delight_dec_min_depth, '{} != {}'.format(args.delight_enc_min_depth,
     #                                                                                   args.delight_dec_min_depth)
     args.delight_emb_depth = args.delight_dec_min_depth
 
     # maximum depth
     args.delight_dec_max_depth = getattr(args, 'delight_dec_max_depth', 8)
     args.delight_enc_max_depth = getattr(args, 'delight_enc_max_depth', 8)
-    # assert args.delight_enc_max_depth == args.delight_dec_max_depth, '{} != {}'.format(args.delight_enc_max_depth,
+    #assert args.delight_enc_max_depth == args.delight_dec_max_depth, '{} != {}'.format(args.delight_enc_max_depth,
     #                                                                                   args.delight_dec_max_depth)
 
     # we set number of encoder and decoder blocks equal to max depth
@@ -1255,9 +1250,9 @@ def delight_transformer_wmt16_en_de(args):
     args.dropout = getattr(args, "dropout", scale_dropout_d_m)
     args.delight_emb_dropout = getattr(args, "delight_emb_dropout", 0.1)
     args.attention_dropout = getattr(args, "attention_dropout", scale_attn_drop_d_m)
-    args.delight_dropout = getattr(args, "delight_dropout", 0.0)  # we don't use for large datasets
+    args.delight_dropout = getattr(args, "delight_dropout", 0.0) # we don't use for large datasets
     args.pe_dropout = getattr(args, "pe_dropout", 0.1)
-    args.activation_dropout = getattr(args, "activation_dropout", 0.0)  # we don't use it
+    args.activation_dropout = getattr(args, "activation_dropout", 0.0) # we don't use it
     args.ffn_dropout = getattr(args, "ffn_dropout", scale_dropout_d_m)
 
     # shared embeddings
@@ -1281,14 +1276,14 @@ def delight_transformer_iwslt_de_en(args):
     # minimum depth
     args.delight_dec_min_depth = getattr(args, 'delight_dec_min_depth', 4)
     args.delight_enc_min_depth = getattr(args, 'delight_enc_min_depth', 4)
-    # assert args.delight_enc_min_depth == args.delight_dec_min_depth, '{} != {}'.format(args.delight_enc_min_depth,
+    #assert args.delight_enc_min_depth == args.delight_dec_min_depth, '{} != {}'.format(args.delight_enc_min_depth,
     #                                                                                   args.delight_dec_min_depth)
     args.delight_emb_depth = args.delight_dec_min_depth
 
     # maximum depth
     args.delight_dec_max_depth = getattr(args, 'delight_dec_max_depth', 8)
     args.delight_enc_max_depth = getattr(args, 'delight_enc_max_depth', 8)
-    # assert args.delight_enc_max_depth == args.delight_dec_max_depth, '{} != {}'.format(args.delight_enc_max_depth,
+    #assert args.delight_enc_max_depth == args.delight_dec_max_depth, '{} != {}'.format(args.delight_enc_max_depth,
     #                                                                                   args.delight_dec_max_depth)
 
     # we set number of encoder and decoder blocks equal to max depth
@@ -1323,7 +1318,7 @@ def delight_transformer_iwslt_de_en(args):
     args.attention_dropout = getattr(args, "attention_dropout", scale_attn_drop_d_m)
     args.delight_dropout = getattr(args, "delight_dropout", scale_delight_drop_d_m)
     args.pe_dropout = getattr(args, "pe_dropout", 0.1)
-    args.activation_dropout = getattr(args, "activation_dropout", 0.0)  # we don't use it
+    args.activation_dropout = getattr(args, "activation_dropout", 0.0) # we don't use it
     args.ffn_dropout = getattr(args, "ffn_dropout", scale_dropout_d_m)
 
     # shared embeddings
